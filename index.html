@@ -1,20 +1,23 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teachable Machine Rock Scissors Paper</title>
+
+    <title>AI Rock Scissors Paper Game</title>
 
     <style>
+
         body {
-            font-family: Arial, sans-serif;
             text-align: center;
+            font-family: Arial, sans-serif;
             background-color: #f4f6f9;
             padding: 20px;
         }
 
-        h1 {
+        h2 {
             color: #333;
         }
 
@@ -22,322 +25,553 @@
             padding: 12px 25px;
             margin: 10px;
             font-size: 18px;
-            cursor: pointer;
             border: none;
             border-radius: 8px;
             background-color: #2878d0;
             color: white;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background-color: gray;
+            cursor: not-allowed;
         }
 
         #webcam-container {
-            margin: 20px auto;
-        }
-
-        #label-container {
             margin: 15px;
         }
 
-        .game-box {
-            background-color: white;
-            width: 320px;
-            margin: 20px auto;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px #ccc;
-        }
-
-        .result {
-            font-size: 24px;
+        #countdown {
+            font-size: 45px;
             font-weight: bold;
-            color: #e44d26;
+            color: #e74c3c;
             margin: 20px;
         }
 
-        .score {
-            font-size: 22px;
-            color: #2878d0;
+        #result {
+            font-size: 24px;
             font-weight: bold;
+            color: #2878d0;
+            margin: 20px;
         }
+
+        #score {
+            font-size: 22px;
+            margin: 20px;
+        }
+
+        #label-container {
+            font-size: 17px;
+            line-height: 1.8;
+            margin: 15px;
+        }
+
+        #status {
+            color: #555;
+            margin: 15px;
+        }
+
     </style>
+
 </head>
 
 <body>
 
-    <h1>Rock Scissors Paper Game</h1>
-    <h3>Play against the Computer! (Best of 3)</h3>
+    <h2>AI 가위바위보 게임</h2>
 
-    <button type="button" onclick="init()">Start Game</button>
-    <button type="button" onclick="resetGame()">Restart</button>
+    <button id="startBtn" onclick="startGame()">
+        게임 시작
+    </button>
+
+    <button onclick="resetGame()">
+        점수 초기화
+    </button>
+
+    <h3>나의 손동작</h3>
 
     <div id="webcam-container"></div>
 
-    <div id="label-container"></div>
-
-    <div class="game-box">
-
-        <h2>Game Status</h2>
-
-        <p>My Choice: <span id="my-choice">-</span></p>
-
-        <p>Computer Choice: <span id="computer-choice">-</span></p>
-
-        <div class="result" id="round-result">
-            Start the game!
-        </div>
-
-        <div class="score">
-            Me <span id="my-score">0</span> :
-            <span id="computer-score">0</span> Computer
-        </div>
-
-        <h3 id="game-result">First to 2 wins!</h3>
-
+    <div id="label-container">
+        웹캠 실행 전
     </div>
 
+    <div id="countdown"></div>
+
+    <h3>게임 결과</h3>
+
+    <div id="result">
+        게임을 시작하세요!
+    </div>
+
+    <h3>점수 (3판 2선승제)</h3>
+
+    <div id="score">
+        나: 0점 / 컴퓨터: 0점
+    </div>
+
+    <div id="status">
+        게임 준비 완료
+    </div>
+
+
+    <!-- TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
 
+    <!-- Teachable Machine -->
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
 
     <script>
 
-        // Teachable Machine model path
+        // 1. Teachable Machine 모델 경로
+
         const URL = "./model/";
 
-        let model, webcam;
-        let labelContainer, maxPredictions;
+        let model;
+        let webcam;
 
-        // Score and game status
+        let isReady = false;
+        let isPlaying = false;
+        let gameOver = false;
+
         let myScore = 0;
         let computerScore = 0;
 
-        let gameStarted = false;
-        let gameFinished = false;
+        // 클래스 이름
+        const hands = ["Scissors", "Rock", "Paper"];
 
-        // Prevent duplicate judgments
-        let lastChoice = "";
-        let choiceCount = 0;
+        const startBtn =
+            document.getElementById("startBtn");
 
-        // Rock Scissors Paper
-        const choices = ["Scissors", "Rock", "Paper"];
 
-        // Start game
-        async function init() {
+        // 시간 지연 함수
 
-            if (gameStarted) return;
+        function sleep(ms) {
 
-            gameStarted = true;
+            return new Promise(resolve => setTimeout(resolve, ms));
 
-            document.getElementById("game-result").innerHTML =
-                "Show your hand to the camera!";
+        }
 
-            const modelURL = URL + "model.json";
-            const metadataURL = URL + "metadata.json";
 
-            // Load model
-            model = await tmImage.load(modelURL, metadataURL);
+        // 2. 게임 시작 및 모델 로딩
 
-            maxPredictions = model.getTotalClasses();
+        async function startGame() {
 
-            // Setup webcam
-            const flip = true;
+            if (isPlaying) return;
 
-            webcam = new tmImage.Webcam(200, 200, flip);
-
-            await webcam.setup();
-            await webcam.play();
-
-            window.requestAnimationFrame(loop);
-
-            // Display webcam
-            document.getElementById("webcam-container")
-                .appendChild(webcam.canvas);
-
-            labelContainer =
-                document.getElementById("label-container");
-
-            for (let i = 0; i < maxPredictions; i++) {
-
-                labelContainer.appendChild(
-                    document.createElement("div")
-                );
-
+            if (gameOver) {
+                resetGame();
             }
-        }
 
-        // Webcam loop
-        async function loop() {
+            startBtn.disabled = true;
 
-            if (!gameStarted) return;
+            try {
 
-            webcam.update();
+                // 모델 최초 실행 시에만 로딩
 
-            await predict();
+                if (!isReady) {
 
-            window.requestAnimationFrame(loop);
-        }
+                    document.getElementById("status").innerHTML =
+                        "AI 모델을 불러오는 중입니다.";
 
-        // Predict hand gesture
-        async function predict() {
+                    const modelURL =
+                        URL + "model.json";
 
-            if (gameFinished) return;
+                    const metadataURL =
+                        URL + "metadata.json";
 
-            const prediction = await model.predict(webcam.canvas);
+                    model = await tmImage.load(
+                        modelURL,
+                        metadataURL
+                    );
 
-            let bestPrediction = prediction[0];
+                    // 클래스 이름 확인
 
-            for (let i = 0; i < maxPredictions; i++) {
+                    console.log(
+                        "모델 클래스:",
+                        model.getClassLabels()
+                    );
 
-                const classPrediction =
-                    prediction[i].className + ": " +
-                    prediction[i].probability.toFixed(2);
+                    // 웹캠 설정
 
-                labelContainer.childNodes[i].innerHTML =
-                    classPrediction;
+                    webcam = new tmImage.Webcam(
+                        300, 300, true
+                    );
 
-                if (prediction[i].probability >
-                    bestPrediction.probability) {
+                    await webcam.setup();
 
-                    bestPrediction = prediction[i];
+                    await webcam.play();
+
+                    document.getElementById("webcam-container")
+                        .appendChild(webcam.canvas);
+
+                    isReady = true;
+
                 }
+
+                // 한 판 진행
+
+                await playRound();
+
             }
 
-            const myChoice = bestPrediction.className;
+            catch (error) {
 
-            // Recognition confidence must be at least 90%
-            if (bestPrediction.probability < 0.90) {
+                console.error(error);
 
-                lastChoice = "";
-                choiceCount = 0;
-                return;
+                document.getElementById("status").innerHTML =
+                    "오류 발생: 모델 경로와 카메라 권한을 확인하세요.";
+
+                startBtn.disabled = false;
+
             }
 
-            // Check class name
-            if (!choices.includes(myChoice)) return;
-
-            // Check whether the same gesture continues
-            if (myChoice === lastChoice) {
-
-                choiceCount++;
-
-            } else {
-
-                lastChoice = myChoice;
-                choiceCount = 0;
-            }
-
-            // Play one round after continuous recognition
-            if (choiceCount >= 30) {
-
-                playGame(myChoice);
-
-                lastChoice = "";
-                choiceCount = 0;
-            }
         }
 
-        // Rock Scissors Paper game
-        function playGame(myChoice) {
 
-            if (gameFinished) return;
+        // 3. 한 판 진행
 
-            // Computer randomly selects a gesture
-            const computerChoice =
-                choices[Math.floor(Math.random() * 3)];
+        async function playRound() {
 
-            document.getElementById("my-choice").innerHTML =
-                myChoice;
+            isPlaying = true;
 
-            document.getElementById("computer-choice").innerHTML =
-                computerChoice;
+            document.getElementById("status").innerHTML =
+                "손동작을 준비하세요!";
+
+            document.getElementById("result").innerHTML =
+                "가위, 바위, 보 중 하나를 준비하세요.";
+
+            // 3초 카운트다운
+
+            for (let i = 3; i >= 1; i--) {
+
+                document.getElementById("countdown").innerHTML =
+                    i;
+
+                await sleep(1000);
+
+            }
+
+            document.getElementById("countdown").innerHTML =
+                "인식 중!";
+
+            document.getElementById("status").innerHTML =
+                "AI가 손동작을 분석하고 있습니다.";
+
+            // 손동작 인식
+
+            const myHand = await recognizeHand();
+
+            if (myHand === null) {
+
+                document.getElementById("result").innerHTML =
+                    "손동작을 인식하지 못했습니다.";
+
+                document.getElementById("status").innerHTML =
+                    "다시 게임 시작 버튼을 눌러주세요.";
+
+                document.getElementById("countdown").innerHTML =
+                    "";
+
+                isPlaying = false;
+
+                startBtn.disabled = false;
+
+                startBtn.innerHTML = "다시 시도";
+
+                return;
+
+            }
+
+
+            // 컴퓨터가 무작위로 선택
+
+            const computerHand =
+                hands[Math.floor(Math.random() * 3)];
+
+
+            // 승패 판정
 
             let result = "";
 
-            // Determine winner
-            if (myChoice === computerChoice) {
+            if (myHand === computerHand) {
 
-                result = "Draw!";
+                result = "무승부!";
 
-            } else if (
+            }
 
-                (myChoice === "Rock" &&
-                 computerChoice === "Scissors") ||
+            else if (
 
-                (myChoice === "Scissors" &&
-                 computerChoice === "Paper") ||
+                (myHand === "Scissors" &&
+                 computerHand === "Paper") ||
 
-                (myChoice === "Paper" &&
-                 computerChoice === "Rock")
+                (myHand === "Rock" &&
+                 computerHand === "Scissors") ||
+
+                (myHand === "Paper" &&
+                 computerHand === "Rock")
 
             ) {
 
-                result = "You Win! 🎉";
+                result = "승리!";
+
                 myScore++;
 
-            } else {
+            }
 
-                result = "You Lose!";
+            else {
+
+                result = "패배!";
+
                 computerScore++;
+
             }
 
-            document.getElementById("round-result").innerHTML =
-                result;
 
-            // Display scores
-            document.getElementById("my-score").innerHTML =
-                myScore;
+            // 게임 결과 출력
 
-            document.getElementById("computer-score").innerHTML =
-                computerScore;
+            document.getElementById("result").innerHTML =
 
-            // Check final result
-            if (myScore === 2) {
+                "나: " + myHand +
 
-                gameFinished = true;
+                "<br>컴퓨터: " + computerHand +
 
-                document.getElementById("game-result").innerHTML =
-                    "🏆 Congratulations! You Win!";
+                "<br><br>" + result;
 
-            } else if (computerScore === 2) {
 
-                gameFinished = true;
+            // 점수 출력
 
-                document.getElementById("game-result").innerHTML =
-                    "Computer Wins! Try Again!";
+            document.getElementById("score").innerHTML =
 
-            } else {
+                "나: " + myScore +
 
-                document.getElementById("game-result").innerHTML =
-                    "Get Ready for the Next Round!";
+                "점 / 컴퓨터: " + computerScore + "점";
+
+
+            document.getElementById("countdown").innerHTML = "";
+
+
+            // 3판 2선승제
+
+            if (myScore >= 2 || computerScore >= 2) {
+
+                gameOver = true;
+
+                if (myScore >= 2) {
+
+                    document.getElementById("result").innerHTML +=
+                        "<br><br>축하합니다! 최종 승리!";
+
+                }
+
+                else {
+
+                    document.getElementById("result").innerHTML +=
+                        "<br><br>컴퓨터 최종 승리!";
+
+                }
+
+                document.getElementById("status").innerHTML =
+                    "게임 종료! 다시 시작할 수 있습니다.";
+
+                startBtn.innerHTML = "다시 시작";
+
             }
+
+            else {
+
+                document.getElementById("status").innerHTML =
+                    "다음 판을 진행하려면 버튼을 누르세요.";
+
+                startBtn.innerHTML = "다음 판";
+
+            }
+
+
+            isPlaying = false;
+
+            startBtn.disabled = false;
+
         }
 
-        // Reset game
+
+        // 4. 손동작 인식 함수
+
+        async function recognizeHand() {
+
+            const total = {};
+
+            const labels = model.getClassLabels();
+
+            // 클래스별 확률 초기화
+
+            for (const name of labels) {
+
+                total[name] = 0;
+
+            }
+
+
+            // 12회 예측
+
+            for (let i = 0; i < 12; i++) {
+
+                webcam.update();
+
+                const prediction =
+                    await model.predict(webcam.canvas);
+
+                for (let j = 0; j < prediction.length; j++) {
+
+                    const name =
+                        prediction[j].className;
+
+                    const probability =
+                        prediction[j].probability;
+
+                    total[name] += probability;
+
+                }
+
+                await sleep(150);
+
+            }
+
+
+            // 평균 확률 계산
+
+            let bestName = "";
+
+            let bestProbability = -1;
+
+            let secondProbability = -1;
+
+            for (const name of labels) {
+
+                const avg = total[name] / 12;
+
+                if (avg > bestProbability) {
+
+                    secondProbability = bestProbability;
+
+                    bestProbability = avg;
+
+                    bestName = name;
+
+                }
+
+                else if (avg > secondProbability) {
+
+                    secondProbability = avg;
+
+                }
+
+            }
+
+
+            // 실제 인식 결과 표시
+
+            document.getElementById("label-container").innerHTML =
+
+                "인식 클래스: " + labels.join(", ") +
+
+                "<br>최종 인식: " + bestName +
+
+                "<br>평균 확률: " +
+                (bestProbability * 100).toFixed(1) + "%";
+
+
+            // 클래스명 변환
+
+            const result = normalizeHand(bestName);
+
+
+            // 인식 결과 확인
+
+            if (result === null) {
+
+                document.getElementById("status").innerHTML =
+                    "클래스 이름을 확인하세요.";
+
+                return null;
+
+            }
+
+
+            // 확률이 너무 낮으면 재시도
+
+            if (bestProbability < 0.40) {
+
+                document.getElementById("status").innerHTML =
+                    "인식 정확도가 낮습니다. 다시 시도하세요.";
+
+                return null;
+
+            }
+
+            return result;
+
+        }
+
+
+        // 5. 클래스 이름 변환
+
+        function normalizeHand(name) {
+
+            const n = name.toLowerCase().trim();
+
+            if (n === "scissors") {
+                return "Scissors";
+            }
+
+            if (n === "rock") {
+                return "Rock";
+            }
+
+            if (n === "paper") {
+                return "Paper";
+            }
+
+            return null;
+
+        }
+
+
+        // 6. 점수 초기화
+
         function resetGame() {
 
             myScore = 0;
+
             computerScore = 0;
 
-            gameFinished = false;
+            gameOver = false;
 
-            lastChoice = "";
-            choiceCount = 0;
+            isPlaying = false;
 
-            document.getElementById("my-choice").innerHTML = "-";
+            document.getElementById("score").innerHTML =
+                "나: 0점 / 컴퓨터: 0점";
 
-            document.getElementById("computer-choice").innerHTML = "-";
+            document.getElementById("result").innerHTML =
+                "게임을 시작하세요!";
 
-            document.getElementById("my-score").innerHTML = "0";
+            document.getElementById("countdown").innerHTML =
+                "";
 
-            document.getElementById("computer-score").innerHTML = "0";
+            document.getElementById("label-container").innerHTML =
+                "손동작을 준비하세요.";
 
-            document.getElementById("round-result").innerHTML =
-                "Start a new game!";
+            document.getElementById("status").innerHTML =
+                "게임 준비 완료!";
 
-            document.getElementById("game-result").innerHTML =
-                "First to 2 wins!";
+            startBtn.innerHTML = "게임 시작";
+
+            startBtn.disabled = false;
+
         }
 
     </script>
 
 </body>
+
 </html>
