@@ -108,14 +108,14 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
                 <div class="player-name">🙋 나</div>
                 <div class="player-icon" id="myIcon">✋</div>
                 <div class="player-score" id="myScore">0</div>
-                <div class="score-label">PLAYER</div>
+                <!-- <div class="score-label">PLAYER</div> -->
             </div>
             <div class="vs">VS</div>
             <div class="player">
                 <div class="player-name">🤖 컴퓨터</div>
                 <div class="player-icon" id="computerIcon">🤖</div>
                 <div class="player-score" id="computerScore">0</div>
-                <div class="score-label">COMPUTER</div>
+                <!-- <div class="score-label">COMPUTER</div> -->
             </div>
         </div>
 
@@ -177,7 +177,9 @@ let myScore=0, computerScore=0; // 플레이어와 컴퓨터의 누적 승리 �
 const hands=["Scissors","Rock","Paper"];
 const handEmoji={Scissors:"✌️",Rock:"✊",Paper:"✋"};
 const handKorean={Scissors:"가위",Rock:"바위",Paper:"보"};
-const FAIL_MESSAGE="인식이 불가합니다. 다시 시도해 주세요."; // 인식 실패 시 표시할 문구
+const FAIL_MESSAGE="인식이 불가합니다. 다시 시도해 주세요."; // 일반적인 인식 실패 문구
+const LOW_MESSAGE="40% 이상의 결과만 인식합니다. 다시 시도해 주세요."; // 1위 확률이 40% 미만일 때의 문구
+let failMessage=FAIL_MESSAGE; // 직전 인식 실패에 사용할 문구 저장
 const startBtn=document.getElementById("startBtn"); // 게임 시작 버튼 객체 가져오기
 
 // 지정한 시간만큼 실행을 기다리는 비동기 함수: 1000ms는 1초
@@ -224,8 +226,8 @@ async function playRound() {
     document.getElementById("status").innerText="🤖 AI가 손동작을 분석하고 있습니다.";
     const myHand=await recognizeHand(); // AI 모델로 플레이어의 손동작 인식
     if(myHand===null) { // 인식 결과가 없거나 정확도가 낮은 경우
-        document.getElementById("result").innerText=FAIL_MESSAGE; // 인식 실패 문구 출력
-        document.getElementById("status").innerText=FAIL_MESSAGE;
+        document.getElementById("result").innerText=failMessage; // 인식 실패 문구 출력
+        document.getElementById("status").innerText=failMessage;
         document.getElementById("countdown").innerText="";
         isPlaying=false; // 게임 진행 상태 해제
         startBtn.disabled=false; // 다시 시도할 수 있도록 버튼 활성화
@@ -289,17 +291,23 @@ async function recognizeHand() {
     const results=labels.map(name=>({name:name,avg:total[name]/count,votes:votes[name]}));
     results.sort((a,b)=>b.avg-a.avg); // 평균 확률이 높은 클래스부터 내림차순 정렬
     const best=results[0], second=results[1]; // 1위 클래스와 2위 클래스 정보 가져오기
-    let output=""; // 화면에 표시할 가위, 바위, 보 인식률 문자열
+    let output=""; // 화면에 표시할 클래스별 인식률 문자열
     for(const p of results) {
-        const hand=normalizeHand(p.name); // 가위, 바위, 보 클래스만 표시 (Background 등은 제외)
-        if(hand===null) continue;
+        const hand=normalizeHand(p.name); // 가위, 바위, 보이면 영문 이름으로 변환, 그 외(Background 등)는 null
+        const label=hand?handKorean[hand]:p.name; // 가위, 바위, 보는 한글로, Background 등은 모델의 클래스 이름 그대로 표시
         const percentage=(p.avg*100).toFixed(1); // 0~1 사이의 확률을 백분율로 변환
-        output+=`<div class="prediction"><span class="prediction-name">${handKorean[hand]}</span><div class="bar-bg"><div class="bar-fill" style="width:${percentage}%"></div></div><span class="prediction-value">${percentage}%</span></div>`; // 가위, 바위, 보 이름, 확률 막대, 백분율 출력
+        output+=`<div class="prediction"><span class="prediction-name">${label}</span><div class="bar-bg"><div class="bar-fill" style="width:${percentage}%"></div></div><span class="prediction-value">${percentage}%</span></div>`; // 클래스 이름, 확률 막대, 백분율 출력 (Background 포함)
     }
-    // 인식 실패 조건: 1위가 가위·바위·보가 아님(Background, 손 없음), 1위 평균 확률 60% 미만, 1·2위 차이 8% 미만, 1위 투표 8회 미만
-    const failed=normalizeHand(best.name)===null||best.avg<0.60||(second&&best.avg-second.avg<0.08)||best.votes<8;
+    // 인식 실패 판정: 1위 평균 확률이 40% 미만이면 LOW_MESSAGE, 그 외 실패는 FAIL_MESSAGE
+    // 그 외 실패: 1위가 가위·바위·보가 아님(Background, 손 없음), 1·2위 차이 8% 미만, 1위 투표 8회 미만
+    let failed=false;
+    if(best.avg<0.40) {
+        failed=true; failMessage=LOW_MESSAGE;
+    } else if(normalizeHand(best.name)===null||(second&&best.avg-second.avg<0.08)||best.votes<8) {
+        failed=true; failMessage=FAIL_MESSAGE;
+    }
     if(failed) {
-        output+=`<div style="margin-top:15px;font-weight:bold;color:#e05272">${FAIL_MESSAGE}</div>`; // 실패 문구 표시
+        output+=`<div style="margin-top:15px;font-weight:bold;color:#e05272">${failMessage}</div>`; // 실패 문구 표시
         document.getElementById("label-container").innerHTML=output;
         return null; // 손동작 결과를 반환하지 않음
     }
