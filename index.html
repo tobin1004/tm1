@@ -58,8 +58,9 @@ body { margin:0; min-height:100vh; font-family:Arial,"Malgun Gothic",sans-serif;
 .prediction-value { width:65px; text-align:right; font-weight:bold; }
 
 /* 게임 결과를 별도의 카드에 표시 */
-#round-result { font-size:19px; font-weight:bold; line-height:1.8; color:#454d70; min-height:65px; }
-#round-result { margin-top:15px; min-height:0; } /* 각 판의 결과: AI 손동작 인식 화면 아래에 표시 */
+.result-card { margin-top:25px; padding:25px 15px; border-radius:18px; background:linear-gradient(135deg,#f0edff,#fdf0f5); text-align:center; }
+.result-card h3 { margin:0 0 15px; color:#6554bd; }
+#result { font-size:19px; font-weight:bold; line-height:1.8; color:#454d70; min-height:65px; }
 .win { color:#16a36a; } /* 승리 */
 .lose { color:#e05272; } /* 패배 */
 .draw { color:#a27a18; } /* 무승부 */
@@ -99,7 +100,7 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
 
     <div class="game-card">
 
-        <h3 class="section-title" id="scoreTitle">🏆 SCORE BOARD</h3> <!-- 게임이 끝나면 최종 결과 문구로 바뀜 -->
+        <h3 class="section-title">🏆 SCORE BOARD</h3>
 
         <!-- 나와 컴퓨터의 점수 및 현재 손동작을 표시하는 영역 -->
         <div class="score-board">
@@ -107,7 +108,7 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
                 <div class="player-name">🙋 나</div>
                 <div class="player-icon" id="myIcon">✋</div>
                 <div class="player-score" id="myScore">0</div>
-                <div class="score-label">PLAYER</div>
+                <!-- <div class="score-label">PLAYER</div> -->
             </div>
             <div class="vs">VS</div>
             <div class="player">
@@ -123,12 +124,12 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
             <div class="progress-item" id="myProgress1"></div>
             <div class="progress-item" id="myProgress2"></div>
             <div class="progress-item" id="comProgress1"></div>
-            <!-- <div class="progress-item" id="comProgress2"></div> -->
+            <div class="progress-item" id="comProgress2"></div>
         </div>
 
         <!-- 웹캠 영상과 인공지능 분석 결과를 표시하는 영역 -->
         <div class="webcam-card">
-            <h3 id="panelTitle">📷 AI 손동작 인식</h3>
+            <h3>📷 AI 손동작 인식</h3>
 
             <!-- 게임 시작, 다음 판 진행 및 점수 초기화 버튼 (제목 아래로 이동) -->
             <div class="button-group">
@@ -136,19 +137,19 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
                 <button id="resetBtn" onclick="resetGame()">↻ 점수 초기화</button>
             </div>
 
-            <!-- 웹캠 영상: 게임 중, 게임 종료 후에도 항상 표시 -->
             <div id="webcam-container">
                 <span>게임 시작 버튼을 눌러주세요.</span>
             </div>
-
-            <!-- 화면 1: AI 손동작 인식 (카운트다운, 인식률, 각 판 결과) -->
-            <div id="recognition-view">
-                <div id="countdown"></div>
-                <div id="label-container">
-                    인공지능이 나의 손동작을 분석합니다.
-                </div>
-                <div id="round-result"></div> <!-- 각 판의 대결 결과 -->
+            <div id="countdown"></div>
+            <div id="label-container">
+                인공지능이 나의 손동작을 분석합니다.
             </div>
+        </div>
+
+        <!-- 플레이어와 컴퓨터의 대결 결과를 출력하는 영역 -->
+        <div class="result-card">
+            <h3>🎮 GAME RESULT</h3>
+            <div id="result">게임을 시작하세요!</div>
         </div>
 
         <!-- 모델 로딩, 인식 진행, 게임 종료 등의 상태 메시지 -->
@@ -176,19 +177,12 @@ let myScore=0, computerScore=0; // 플레이어와 컴퓨터의 누적 승리 �
 const hands=["Scissors","Rock","Paper"];
 const handEmoji={Scissors:"✌️",Rock:"✊",Paper:"✋"};
 const handKorean={Scissors:"가위",Rock:"바위",Paper:"보"};
-const FAIL_MESSAGE="인식이 불가합니다. 다시 시도해 주세요."; // 일반적인 인식 실패 문구
-const LOW_MESSAGE="30% 이상의 결과만 인식합니다. 다시 시도해 주세요."; // 1위 확률이 30% 미만일 때의 문구
-const GAP_MESSAGE="1·2위 차이가 4% 미만으로 인식이 불가 - 다시 시도해 주세요."; // 1·2위 확률 차이가 4% 미만일 때의 문구
+const FAIL_MESSAGE="인식 정확도가 낮습니다. 다시 시도하세요."; // 일반적인 인식 실패 문구
+const LOW_MESSAGE="30% 이상의 결과만 인식합니다. 다시 시도해 주세요."; // 1위 확률이 40% 미만일 때의 문구
 let failMessage=FAIL_MESSAGE; // 직전 인식 실패에 사용할 문구 저장
 const startBtn=document.getElementById("startBtn"); // 게임 시작 버튼 객체 가져오기
 
 // 지정한 시간만큼 실행을 기다리는 비동기 함수: 1000ms는 1초
-// 웹캠 영상을 계속 갱신하는 함수: 게임이 끝나도 영상이 멈추지 않도록 함
-function webcamLoop() {
-    if(webcam) webcam.update();
-    requestAnimationFrame(webcamLoop);
-}
-
 function sleep(ms) { return new Promise(resolve=>setTimeout(resolve,ms)); }
 
 // 4. 게임 시작 함수: 모델 로딩, 웹캠 실행 및 한 판 진행을 담당
@@ -209,7 +203,6 @@ async function startGame() {
             webcam.canvas.classList.add("mirror"); // 화면에 출력되는 웹캠 영상에 좌우 반전 CSS 적용
             document.getElementById("webcam-container").innerHTML="";
             document.getElementById("webcam-container").appendChild(webcam.canvas); // 웹캠 영상을 HTML에 삽입
-            webcamLoop(); // 웹캠 영상 계속 갱신 시작
             isReady=true; // 모델과 웹캠 준비 완료 상태 저장
         }
         await playRound(); // 모델 준비가 끝나면 한 판 진행
@@ -224,7 +217,7 @@ async function startGame() {
 async function playRound() {
     isPlaying=true; // 게임 진행 상태로 변경
     document.getElementById("status").innerText="손동작을 준비하세요!";
-    document.getElementById("round-result").innerHTML=""; // 이전 판의 결과 지우기
+    document.getElementById("result").innerHTML="가위, 바위, 보 중 하나를 준비하세요.";
     for(let i=3;i>=1;i--) { // 3초부터 1초까지 카운트다운
         document.getElementById("countdown").innerText=i;
         await sleep(1000); // 숫자가 1초마다 바뀌도록 대기
@@ -233,6 +226,7 @@ async function playRound() {
     document.getElementById("status").innerText="🤖 AI가 손동작을 분석하고 있습니다.";
     const myHand=await recognizeHand(); // AI 모델로 플레이어의 손동작 인식
     if(myHand===null) { // 인식 결과가 없거나 정확도가 낮은 경우
+        document.getElementById("result").innerText=failMessage; // 인식 실패 문구 출력
         document.getElementById("status").innerText=failMessage;
         document.getElementById("countdown").innerText="";
         isPlaying=false; // 게임 진행 상태 해제
@@ -252,13 +246,16 @@ async function playRound() {
         result="😢 패배!"; resultClass="lose"; computerScore++; // 나머지 경우에는 컴퓨터 점수 증가
     }
     // innerHTML을 이용해 손동작과 승패 결과를 줄바꿈하여 화면에 출력
-    document.getElementById("round-result").innerHTML="나: "+handKorean[myHand]+" "+handEmoji[myHand]+"<br>컴퓨터: "+handKorean[computerHand]+" "+handEmoji[computerHand]+"<br><span class='"+resultClass+"'>"+result+"</span>";
+    document.getElementById("result").innerHTML="나: "+handKorean[myHand]+" "+handEmoji[myHand]+"<br>컴퓨터: "+handKorean[computerHand]+" "+handEmoji[computerHand]+"<br><span class='"+resultClass+"'>"+result+"</span>";
     updateScore(); // 점수와 승리 진행 막대 업데이트
     document.getElementById("countdown").innerText="";
     if(myScore>=2||computerScore>=2) { // 어느 한쪽이 2승을 달성하면 3판 2선승제 종료
         gameOver=true; // 게임 종료 상태 저장
-        const finalText=myScore>=2?"🏆 축하합니다! 최종 승리!":"🤖 컴퓨터 최종 승리!";
-        document.getElementById("scoreTitle").innerText=finalText; // SCORE BOARD 문구 대신 최종 결과 표시
+        if(myScore>=2) {
+            document.getElementById("result").innerHTML+="<br><br>🏆 축하합니다! 최종 승리!";
+        } else {
+            document.getElementById("result").innerHTML+="<br><br>🤖 컴퓨터 최종 승리!";
+        }
         document.getElementById("status").innerText="게임 종료! 다시 시작할 수 있습니다.";
         startBtn.innerText="🔄 다시 시작";
     } else { // 아직 2승을 달성한 사람이 없으면 다음 판 진행
@@ -301,22 +298,13 @@ async function recognizeHand() {
         const percentage=(p.avg*100).toFixed(1); // 0~1 사이의 확률을 백분율로 변환
         output+=`<div class="prediction"><span class="prediction-name">${label}</span><div class="bar-bg"><div class="bar-fill" style="width:${percentage}%"></div></div><span class="prediction-value">${percentage}%</span></div>`; // 클래스 이름, 확률 막대, 백분율 출력 (Background 포함)
     }
-    // 인식 실패 판정 (위에서부터 차례로 검사, 해당하는 첫 번째 문구 표시)
-    //  1) 1위 평균 확률 30% 미만 → LOW_MESSAGE
-    //  2) 1위가 가위·바위·보가 아님(Background, 손 없음) → FAIL_MESSAGE
-    //  3) 1·2위 확률 차이 4% 미만 → GAP_MESSAGE
-    //  4) 1위 투표 8회 미만 → FAIL_MESSAGE
-    let failed=true;
+    // 인식 실패 판정: 1위 평균 확률이 30% 미만이면 LOW_MESSAGE, 그 외 실패는 FAIL_MESSAGE
+    // 그 외 실패: 1위가 가위·바위·보가 아님(Background, 손 없음), 1·2위 차이 4% 미만, 1위 투표 8회 미만
+    let failed=false;
     if(best.avg<0.30) {
-        failMessage=LOW_MESSAGE;
-    } else if(normalizeHand(best.name)===null) {
-        failMessage=FAIL_MESSAGE;
-    } else if(second&&best.avg-second.avg<0.04) {
-        failMessage=GAP_MESSAGE;
-    } else if(best.votes<8) {
-        failMessage=FAIL_MESSAGE;
-    } else {
-        failed=false;
+        failed=true; failMessage=LOW_MESSAGE;
+    } else if(normalizeHand(best.name)===null||(second&&best.avg-second.avg<0.04)||best.votes<8) {
+        failed=true; failMessage=FAIL_MESSAGE;
     }
     if(failed) {
         output+=`<div style="margin-top:15px;font-weight:bold;color:#e05272">${failMessage}</div>`; // 실패 문구 표시
@@ -354,8 +342,7 @@ function resetGame() {
     updateScore(); // 화면의 점수와 진행 막대를 0점으로 갱신
     document.getElementById("myIcon").innerText="✋";
     document.getElementById("computerIcon").innerText="🤖";
-    document.getElementById("scoreTitle").innerText="🏆 SCORE BOARD"; // 제목 문구 복원
-    document.getElementById("round-result").innerHTML=""; // 각 판 결과 초기화
+    document.getElementById("result").innerText="게임을 시작하세요!";
     document.getElementById("countdown").innerText="";
     document.getElementById("label-container").innerText="인공지능이 나의 손동작을 분석합니다.";
     document.getElementById("status").innerText="게임 준비 완료!";
