@@ -291,13 +291,12 @@ async function recognizeHand() {
     const best=results[0], second=results[1]; // 1위 클래스와 2위 클래스 정보 가져오기
     let output=""; // 화면에 표시할 가위, 바위, 보 인식률 문자열
     for(const p of results) {
-        const hand=normalizeHand(p.name); // 가위, 바위, 보 클래스만 표시 (Background 등은 제외)
-        if(hand===null) continue;
+        const hand=normalizeHand(p.name); // 클래스 이름을 Scissors, Rock, Paper로 변환
         const percentage=(p.avg*100).toFixed(1); // 0~1 사이의 확률을 백분율로 변환
         output+=`<div class="prediction"><span class="prediction-name">${handKorean[hand]}</span><div class="bar-bg"><div class="bar-fill" style="width:${percentage}%"></div></div><span class="prediction-value">${percentage}%</span></div>`; // 가위, 바위, 보 이름, 확률 막대, 백분율 출력
     }
-    // 인식 실패 조건: 1위가 가위·바위·보가 아님(손 없음), 1위 평균 확률 45% 미만, 1·2위 차이 8% 미만, 1위 투표 8회 미만
-    const failed=normalizeHand(best.name)===null||best.avg<0.45||(second&&best.avg-second.avg<0.08)||best.votes<8;
+    // 인식 실패 조건: 1위 평균 확률 45% 미만, 1·2위 차이 8% 미만, 1위 투표 8회 미만
+    const failed=best.avg<0.45||(second&&best.avg-second.avg<0.08)||best.votes<8;
     if(failed) {
         output+=`<div style="margin-top:15px;font-weight:bold;color:#e05272">${FAIL_MESSAGE}</div>`; // 실패 문구 표시
         document.getElementById("label-container").innerHTML=output;
