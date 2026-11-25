@@ -100,7 +100,7 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
 
     <div class="game-card">
 
-        <h3 class="section-title">🏆 SCORE BOARD</h3>
+        <!-- <h3 class="section-title">🏆 SCORE BOARD</h3> -->
 
         <!-- 나와 컴퓨터의 점수 및 현재 손동작을 표시하는 영역 -->
         <div class="score-board">
@@ -177,8 +177,7 @@ let myScore=0, computerScore=0; // 플레이어와 컴퓨터의 누적 승리 �
 const hands=["Scissors","Rock","Paper"];
 const handEmoji={Scissors:"✌️",Rock:"✊",Paper:"✋"};
 const handKorean={Scissors:"가위",Rock:"바위",Paper:"보"};
-const NO_HAND_CLASS="Background"; // 손이 없는 화면을 학습시킨 클래스 이름 (모델의 클래스 이름과 같아야 함)
-let noHandDetected=false; // 직전 인식에서 손이 없다고 판단되었는지 저장
+const FAIL_MESSAGE="인식이 불가합니다. 다시 시도해 주세요."; // 인식 실패 시 표시할 문구
 const startBtn=document.getElementById("startBtn"); // 게임 시작 버튼 객체 가져오기
 
 // 지정한 시간만큼 실행을 기다리는 비동기 함수: 1000ms는 1초
@@ -225,13 +224,8 @@ async function playRound() {
     document.getElementById("status").innerText="🤖 AI가 손동작을 분석하고 있습니다.";
     const myHand=await recognizeHand(); // AI 모델로 플레이어의 손동작 인식
     if(myHand===null) { // 인식 결과가 없거나 정확도가 낮은 경우
-        if(noHandDetected) { // 손이 없는 클래스가 1위인 경우
-            document.getElementById("result").innerText="손이 보이지 않습니다.";
-            document.getElementById("status").innerText="손을 카메라 앞 화면 중앙에 놓고 다시 시도하세요.";
-        } else { // 정확도가 낮은 경우
-            document.getElementById("result").innerText="손동작 인식에 실패했습니다.";
-            document.getElementById("status").innerText="손을 화면 중앙에 놓고 다시 시도하세요.";
-        }
+        document.getElementById("result").innerText=FAIL_MESSAGE; // 인식 실패 문구 출력
+        document.getElementById("status").innerText=FAIL_MESSAGE;
         document.getElementById("countdown").innerText="";
         isPlaying=false; // 게임 진행 상태 해제
         startBtn.disabled=false; // 다시 시도할 수 있도록 버튼 활성화
@@ -272,7 +266,6 @@ async function playRound() {
 
 // 6. AI 손동작 인식 함수: 웹캠 영상 20개를 분석하여 가장 신뢰도 높은 결과 선택
 async function recognizeHand() {
-    noHandDetected=false; // 매 인식마다 손 없음 상태 초기화
     const labels=model.getClassLabels(); // 모델의 클래스 이름 목록 가져오기
     const total={}, votes={}; // 클래스별 확률 합계와 최고 확률 투표 횟수를 저장할 객체
     labels.forEach(name=>{total[name]=0; votes[name]=0;}); // 모든 클래스의 초기값을 0으로 설정
@@ -296,24 +289,22 @@ async function recognizeHand() {
     const results=labels.map(name=>({name:name,avg:total[name]/count,votes:votes[name]}));
     results.sort((a,b)=>b.avg-a.avg); // 평균 확률이 높은 클래스부터 내림차순 정렬
     const best=results[0], second=results[1]; // 1위 클래스와 2위 클래스 정보 가져오기
-    let output=""; // 화면에 표시할 AI 분석 결과 문자열
+    let output=""; // 화면에 표시할 가위, 바위, 보 인식률 문자열
     for(const p of results) {
+        const hand=normalizeHand(p.name); // 가위, 바위, 보 클래스만 표시 (Background 등은 제외)
+        if(hand===null) continue;
         const percentage=(p.avg*100).toFixed(1); // 0~1 사이의 확률을 백분율로 변환
-        output+=`<div class="prediction"><span class="prediction-name">${p.name}</span><div class="bar-bg"><div class="bar-fill" style="width:${percentage}%"></div></div><span class="prediction-value">${percentage}%</span></div>`; // 클래스 이름, 확률 막대, 백분율 출력
+        output+=`<div class="prediction"><span class="prediction-name">${handKorean[hand]}</span><div class="bar-bg"><div class="bar-fill" style="width:${percentage}%"></div></div><span class="prediction-value">${percentage}%</span></div>`; // 가위, 바위, 보 이름, 확률 막대, 백분율 출력
     }
-    output+=`<div style="margin-top:15px;font-weight:bold;color:#6554bd">최종 인식: ${best.name} (${best.votes}회)</div>`; // 최종 1위 클래스와 투표 횟수 표시
+    // 인식 실패 조건: 1위가 가위·바위·보가 아님(손 없음), 1위 평균 확률 45% 미만, 1·2위 차이 8% 미만, 1위 투표 8회 미만
+    const failed=normalizeHand(best.name)===null||best.avg<0.45||(second&&best.avg-second.avg<0.08)||best.votes<8;
+    if(failed) {
+        output+=`<div style="margin-top:15px;font-weight:bold;color:#e05272">${FAIL_MESSAGE}</div>`; // 실패 문구 표시
+        document.getElementById("label-container").innerHTML=output;
+        return null; // 손동작 결과를 반환하지 않음
+    }
+    output+=`<div style="margin-top:15px;font-weight:bold;color:#6554bd">최종 인식: ${handKorean[normalizeHand(best.name)]} (${best.votes}회)</div>`; // 최종 1위 손동작과 투표 횟수 표시
     document.getElementById("label-container").innerHTML=output;
-    // 손이 없는 클래스가 1위이면 손이 보이지 않는 것으로 처리하고 종료
-    if(NO_HAND_CLASS && best.name===NO_HAND_CLASS) {
-        noHandDetected=true;
-        document.getElementById("status").innerText="손이 보이지 않습니다.";
-        return null;
-    }
-    // 인식 신뢰도 검사: 1위 평균 확률 45% 미만, 1·2위 차이 8% 미만 또는 1위 투표 8회 미만이면 실패
-    if(best.avg<0.45||(second&&best.avg-second.avg<0.08)||best.votes<8) {
-        document.getElementById("status").innerText="인식 정확도가 낮습니다. 다시 시도하세요.";
-        return null; // 신뢰도가 부족하므로 손동작 결과를 반환하지 않음
-    }
     return normalizeHand(best.name); // AI 클래스 이름을 게임에서 사용하는 영문 이름으로 변환
 }
 
