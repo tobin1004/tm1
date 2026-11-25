@@ -58,8 +58,7 @@ body { margin:0; min-height:100vh; font-family:Arial,"Malgun Gothic",sans-serif;
 .prediction-value { width:65px; text-align:right; font-weight:bold; }
 
 /* 게임 결과를 별도의 카드에 표시 */
-.result-card { margin-top:25px; padding:25px 15px; border-radius:18px; background:linear-gradient(135deg,#f0edff,#fdf0f5); text-align:center; }
-.result-card h3 { margin:0 0 15px; color:#6554bd; }
+#result-view { display:none; padding:25px 10px; border-radius:18px; background:linear-gradient(135deg,#f0edff,#fdf0f5); } /* 결과 화면: 평소에는 숨김 */
 #result { font-size:19px; font-weight:bold; line-height:1.8; color:#454d70; min-height:65px; }
 .win { color:#16a36a; } /* 승리 */
 .lose { color:#e05272; } /* 패배 */
@@ -129,7 +128,7 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
 
         <!-- 웹캠 영상과 인공지능 분석 결과를 표시하는 영역 -->
         <div class="webcam-card">
-            <h3>📷 AI 손동작 인식</h3>
+            <h3 id="panelTitle">📷 AI 손동작 인식</h3>
 
             <!-- 게임 시작, 다음 판 진행 및 점수 초기화 버튼 (제목 아래로 이동) -->
             <div class="button-group">
@@ -137,19 +136,21 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
                 <button id="resetBtn" onclick="resetGame()">↻ 점수 초기화</button>
             </div>
 
-            <div id="webcam-container">
-                <span>게임 시작 버튼을 눌러주세요.</span>
+            <!-- 화면 1: AI 손동작 인식 (웹캠, 카운트다운, 인식률) -->
+            <div id="recognition-view">
+                <div id="webcam-container">
+                    <span>게임 시작 버튼을 눌러주세요.</span>
+                </div>
+                <div id="countdown"></div>
+                <div id="label-container">
+                    인공지능이 나의 손동작을 분석합니다.
+                </div>
             </div>
-            <div id="countdown"></div>
-            <div id="label-container">
-                인공지능이 나의 손동작을 분석합니다.
-            </div>
-        </div>
 
-        <!-- 플레이어와 컴퓨터의 대결 결과를 출력하는 영역 -->
-        <div class="result-card">
-            <h3>🎮 GAME RESULT</h3>
-            <div id="result">게임을 시작하세요!</div>
+            <!-- 화면 2: 한 판이 끝나면 같은 자리에 대결 결과 표시 -->
+            <div id="result-view">
+                <div id="result">게임을 시작하세요!</div>
+            </div>
         </div>
 
         <!-- 모델 로딩, 인식 진행, 게임 종료 등의 상태 메시지 -->
@@ -185,11 +186,24 @@ const startBtn=document.getElementById("startBtn"); // 게임 시작 버튼 객�
 // 지정한 시간만큼 실행을 기다리는 비동기 함수: 1000ms는 1초
 function sleep(ms) { return new Promise(resolve=>setTimeout(resolve,ms)); }
 
+// 화면 전환 함수: 같은 자리에서 AI 손동작 인식 화면과 결과 화면을 번갈아 표시
+function showRecognition() {
+    document.getElementById("panelTitle").innerText="📷 AI 손동작 인식";
+    document.getElementById("recognition-view").style.display="block";
+    document.getElementById("result-view").style.display="none";
+}
+function showResult() {
+    document.getElementById("panelTitle").innerText="🎮 GAME RESULT";
+    document.getElementById("recognition-view").style.display="none";
+    document.getElementById("result-view").style.display="block";
+}
+
 // 4. 게임 시작 함수: 모델 로딩, 웹캠 실행 및 한 판 진행을 담당
 async function startGame() {
     if(isPlaying) return; // 이미 게임이 진행 중이면 중복 실행 방지
     if(gameOver) resetGame(); // 이전 게임이 끝났다면 점수를 초기화하고 새 게임 시작
     startBtn.disabled=true; // 모델 로딩 및 게임 진행 중 버튼 중복 클릭 방지
+    showRecognition(); // 버튼을 누르면 결과 화면에서 AI 손동작 인식 화면으로 되돌아감
     try {
         if(!isReady) { // 모델과 웹캠은 최초 한 번만 실행하고 이후 재사용
             document.getElementById("status").innerText="⏳ AI 모델을 불러오는 중입니다.";
@@ -217,7 +231,6 @@ async function startGame() {
 async function playRound() {
     isPlaying=true; // 게임 진행 상태로 변경
     document.getElementById("status").innerText="손동작을 준비하세요!";
-    document.getElementById("result").innerHTML="가위, 바위, 보 중 하나를 준비하세요.";
     for(let i=3;i>=1;i--) { // 3초부터 1초까지 카운트다운
         document.getElementById("countdown").innerText=i;
         await sleep(1000); // 숫자가 1초마다 바뀌도록 대기
@@ -226,7 +239,6 @@ async function playRound() {
     document.getElementById("status").innerText="🤖 AI가 손동작을 분석하고 있습니다.";
     const myHand=await recognizeHand(); // AI 모델로 플레이어의 손동작 인식
     if(myHand===null) { // 인식 결과가 없거나 정확도가 낮은 경우
-        document.getElementById("result").innerText=failMessage; // 인식 실패 문구 출력
         document.getElementById("status").innerText=failMessage;
         document.getElementById("countdown").innerText="";
         isPlaying=false; // 게임 진행 상태 해제
@@ -262,6 +274,7 @@ async function playRound() {
         document.getElementById("status").innerText="다음 판을 진행하려면 버튼을 누르세요.";
         startBtn.innerText="▶ 다음 판";
     }
+    showResult(); // 한 판이 끝나면 AI 손동작 인식 자리에 결과 표시
     isPlaying=false; // 한 판의 실행이 끝났으므로 게임 진행 상태 해제
     startBtn.disabled=false; // 다음 판을 시작할 수 있도록 버튼 활성화
 }
@@ -343,6 +356,7 @@ function resetGame() {
     document.getElementById("myIcon").innerText="✋";
     document.getElementById("computerIcon").innerText="🤖";
     document.getElementById("result").innerText="게임을 시작하세요!";
+    showRecognition(); // AI 손동작 인식 화면으로 복원
     document.getElementById("countdown").innerText="";
     document.getElementById("label-container").innerText="인공지능이 나의 손동작을 분석합니다.";
     document.getElementById("status").innerText="게임 준비 완료!";
