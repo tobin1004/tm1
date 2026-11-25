@@ -17,8 +17,7 @@ body { margin:0; min-height:100vh; font-family:Arial,"Malgun Gothic",sans-serif;
 
 /* 제목 영역: 흰색 글자와 가운데 정렬 */
 .header { text-align:center; color:white; margin-bottom:25px; }
-.header h1 { font-size:34px; margin:0 0 10px; }
-.header p { color:#e7e9ff; font-size:15px; }
+.header h1 { font-size:34px; margin:0; }
 
 /* 게임 메인 카드: 흰색 배경, 둥근 모서리, 그림자 효과 */
 .game-card { background:white; border-radius:25px; padding:30px; box-shadow:0 15px 45px rgba(30,20,80,0.25); }
@@ -66,8 +65,8 @@ body { margin:0; min-height:100vh; font-family:Arial,"Malgun Gothic",sans-serif;
 .lose { color:#e05272; } /* 패배 */
 .draw { color:#a27a18; } /* 무승부 */
 
-/* 게임 시작 및 초기화 버튼 배치 */
-.button-group { display:flex; justify-content:center; gap:12px; margin-top:25px; }
+/* 게임 시작 및 초기화 버튼 배치 (AI 손동작 인식 제목 아래) */
+.button-group { display:flex; justify-content:center; gap:12px; margin:0 0 18px; }
 button { border:none; border-radius:12px; padding:14px 28px; font-size:16px; font-weight:bold; cursor:pointer; transition:0.2s; }
 button:hover:not(:disabled) { transform:translateY(-2px); filter:brightness(1.05); }
 button:disabled { opacity:0.5; cursor:not-allowed; }
@@ -97,7 +96,6 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
     <!-- 게임 제목과 소개 문구 -->
     <div class="header">
         <h1>✊ AI 가위바위보 게임 ✌️</h1>
-        <p>인공지능과 함께하는 신나는 대결!</p>
     </div>
 
     <div class="game-card">
@@ -132,6 +130,13 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
         <!-- 웹캠 영상과 인공지능 분석 결과를 표시하는 영역 -->
         <div class="webcam-card">
             <h3>📷 AI 손동작 인식</h3>
+
+            <!-- 게임 시작, 다음 판 진행 및 점수 초기화 버튼 (제목 아래로 이동) -->
+            <div class="button-group">
+                <button id="startBtn" onclick="startGame()">🚀 게임 시작</button>
+                <button id="resetBtn" onclick="resetGame()">↻ 점수 초기화</button>
+            </div>
+
             <div id="webcam-container">
                 <span>게임 시작 버튼을 눌러주세요.</span>
             </div>
@@ -145,12 +150,6 @@ button:disabled { opacity:0.5; cursor:not-allowed; }
         <div class="result-card">
             <h3>🎮 GAME RESULT</h3>
             <div id="result">게임을 시작하세요!</div>
-        </div>
-
-        <!-- 게임 시작, 다음 판 진행 및 점수 초기화 버튼 -->
-        <div class="button-group">
-            <button id="startBtn" onclick="startGame()">🚀 게임 시작</button>
-            <button id="resetBtn" onclick="resetGame()">↻ 점수 초기화</button>
         </div>
 
         <!-- 모델 로딩, 인식 진행, 게임 종료 등의 상태 메시지 -->
