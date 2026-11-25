@@ -177,6 +177,8 @@ let myScore=0, computerScore=0; // 플레이어와 컴퓨터의 누적 승리 �
 const hands=["Scissors","Rock","Paper"];
 const handEmoji={Scissors:"✌️",Rock:"✊",Paper:"✋"};
 const handKorean={Scissors:"가위",Rock:"바위",Paper:"보"};
+const NO_HAND_CLASS="Background"; // 손이 없는 화면을 학습시킨 클래스 이름 (모델의 클래스 이름과 같아야 함)
+let noHandDetected=false; // 직전 인식에서 손이 없다고 판단되었는지 저장
 const startBtn=document.getElementById("startBtn"); // 게임 시작 버튼 객체 가져오기
 
 // 지정한 시간만큼 실행을 기다리는 비동기 함수: 1000ms는 1초
@@ -223,8 +225,13 @@ async function playRound() {
     document.getElementById("status").innerText="🤖 AI가 손동작을 분석하고 있습니다.";
     const myHand=await recognizeHand(); // AI 모델로 플레이어의 손동작 인식
     if(myHand===null) { // 인식 결과가 없거나 정확도가 낮은 경우
-        document.getElementById("result").innerText="손동작 인식에 실패했습니다.";
-        document.getElementById("status").innerText="손을 화면 중앙에 놓고 다시 시도하세요.";
+        if(noHandDetected) { // 손이 없는 클래스가 1위인 경우
+            document.getElementById("result").innerText="손이 보이지 않습니다.";
+            document.getElementById("status").innerText="손을 카메라 앞 화면 중앙에 놓고 다시 시도하세요.";
+        } else { // 정확도가 낮은 경우
+            document.getElementById("result").innerText="손동작 인식에 실패했습니다.";
+            document.getElementById("status").innerText="손을 화면 중앙에 놓고 다시 시도하세요.";
+        }
         document.getElementById("countdown").innerText="";
         isPlaying=false; // 게임 진행 상태 해제
         startBtn.disabled=false; // 다시 시도할 수 있도록 버튼 활성화
@@ -265,6 +272,7 @@ async function playRound() {
 
 // 6. AI 손동작 인식 함수: 웹캠 영상 20개를 분석하여 가장 신뢰도 높은 결과 선택
 async function recognizeHand() {
+    noHandDetected=false; // 매 인식마다 손 없음 상태 초기화
     const labels=model.getClassLabels(); // 모델의 클래스 이름 목록 가져오기
     const total={}, votes={}; // 클래스별 확률 합계와 최고 확률 투표 횟수를 저장할 객체
     labels.forEach(name=>{total[name]=0; votes[name]=0;}); // 모든 클래스의 초기값을 0으로 설정
@@ -295,6 +303,12 @@ async function recognizeHand() {
     }
     output+=`<div style="margin-top:15px;font-weight:bold;color:#6554bd">최종 인식: ${best.name} (${best.votes}회)</div>`; // 최종 1위 클래스와 투표 횟수 표시
     document.getElementById("label-container").innerHTML=output;
+    // 손이 없는 클래스가 1위이면 손이 보이지 않는 것으로 처리하고 종료
+    if(NO_HAND_CLASS && best.name===NO_HAND_CLASS) {
+        noHandDetected=true;
+        document.getElementById("status").innerText="손이 보이지 않습니다.";
+        return null;
+    }
     // 인식 신뢰도 검사: 1위 평균 확률 45% 미만, 1·2위 차이 8% 미만 또는 1위 투표 8회 미만이면 실패
     if(best.avg<0.45||(second&&best.avg-second.avg<0.08)||best.votes<8) {
         document.getElementById("status").innerText="인식 정확도가 낮습니다. 다시 시도하세요.";
